@@ -72,21 +72,79 @@ class TryoutController extends Controller
 
     public function show(Tryout $tryout): JsonResponse
     {
-        $tryout->load(['creator', 'tryoutSubtests.subtest', 'userAccesses.user'])
+        $tryout->load(['creator', 'tryoutSubtests.subtest'])
             ->loadCount('userAccesses');
 
-        $tryout->userAccesses->each(function ($access) {
+        return response()->json([
+            'data' => $tryout,
+        ]);
+    }
+
+    public function participants(Request $request, Tryout $tryout): JsonResponse
+    {
+        $search = $request->query('search');
+        $statusFilter = $request->query('status');
+
+        $query = $tryout->userAccesses()->with('user')
+            ->when($search, function ($q, $search) {
+                $q->whereHas('user', function ($uq) use ($search) {
+                    $uq->where('name', 'like', "%{$search}%")
+                       ->orWhere('email', 'like', "%{$search}%");
+                });
+            })
+            ->when($statusFilter && $statusFilter !== 'all', function ($q) use ($statusFilter, $tryout) {
+                if ($statusFilter === 'finished' || $statusFilter === 'in_progress') {
+                    $q->whereHas('user', function ($uq) use ($tryout, $statusFilter) {
+                        $uq->whereHas('tryoutSessions', function ($sq) use ($tryout, $statusFilter) {
+                            $sq->where('tryout_id', $tryout->id)
+                               ->where('status', $statusFilter)
+                               ->whereRaw('tryout_sessions.attempt_number = (
+                                    SELECT MAX(attempt_number) 
+                                    FROM tryout_sessions ts 
+                                    WHERE ts.user_id = users.id AND ts.tryout_id = ?
+                               )', [$tryout->id]);
+                        });
+                    });
+                } else if ($statusFilter === 'not_started') {
+                    $q->whereDoesntHave('user.tryoutSessions', function ($sq) use ($tryout) {
+                        $sq->where('tryout_id', $tryout->id);
+                    });
+                }
+            });
+
+        $paginated = $query->paginate($request->query('per_page', 15));
+
+        $userIds = collect($paginated->items())->pluck('user_id');
+
+        $sessions = \App\Models\TryoutSession::where('tryout_id', $tryout->id)
+            ->whereIn('user_id', $userIds)
+            ->orderBy('attempt_number', 'asc')
+            ->get()
+            ->keyBy('user_id');
+
+        $paginated->getCollection()->transform(function ($access) use ($sessions) {
+            $session = $sessions->get($access->user_id);
+            if (!$session) {
+                $status = 'not_started';
+            } else {
+                $status = $session->status; // 'finished' or 'in_progress'
+            }
+
+            $access->setAttribute('tryout_status', $status);
+
             $proofImages = collect($access->proof_images ?: ($access->proof_image ? [$access->proof_image] : []))
                 ->filter()
                 ->values();
 
             $access->setAttribute('proof_image_urls', $proofImages
-                ->map(fn ($path) => asset(Storage::disk('public')->url($path)))
+                ->map(fn ($path) => asset(\Illuminate\Support\Facades\Storage::disk('public')->url($path)))
                 ->all());
+
+            return $access;
         });
 
         return response()->json([
-            'data' => $tryout,
+            'data' => $paginated,
         ]);
     }
 

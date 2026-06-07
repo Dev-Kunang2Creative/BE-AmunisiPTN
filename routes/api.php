@@ -127,6 +127,7 @@ Route::middleware(['auth:sanctum', 'admin'])
         Route::get('/questions/bulk-import/excel-template', [BulkImportQuestionController::class, 'excelTemplate']);
 
         // --- TRYOUT & PENGATURAN TRYOUT ---
+        Route::get('/tryouts/{tryout}/participants', [TryoutController::class, 'participants']);
         Route::apiResource('tryouts', TryoutController::class);
         Route::get('/tryouts/{tryout}/export-pdf', [TryoutController::class, 'exportPdf']);
         Route::get('/tryouts/{tryout}/users/{user}/review', [TryoutController::class, 'userReview']);
