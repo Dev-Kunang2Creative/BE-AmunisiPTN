@@ -33,68 +33,24 @@ class KelasOrderController extends Controller
             return response()->json(['message' => 'Kelas ini tidak tersedia.'], 422);
         }
 
-        $finalPrice = $kelas->discount_price ?? $kelas->price;
+        $alreadyEnrolled = UserKelasEnrollment::where('user_id', $request->user()->id)
+            ->where('kelas_id', $kelas->id)
+            ->exists();
 
-        $orderResult = DB::transaction(function () use ($request, $kelas, $finalPrice) {
-            $lockedUser = User::whereKey($request->user()->id)
-                ->lockForUpdate()
-                ->first();
-
-            if (! $lockedUser) {
-                return ['error' => 'User tidak ditemukan.', 'status' => 404];
-            }
-
-            $alreadyEnrolled = UserKelasEnrollment::where('user_id', $lockedUser->id)
-                ->where('kelas_id', $kelas->id)
-                ->exists();
-
-            if ($alreadyEnrolled) {
-                return ['error' => 'Anda sudah terdaftar di kelas ini.', 'status' => 422];
-            }
-
-            $existingPendingOrder = KelasOrder::where('user_id', $lockedUser->id)
-                ->where('kelas_id', $kelas->id)
-                ->where('status', 'pending')
-                ->latest()
-                ->first();
-
-            if ($existingPendingOrder) {
-                if ($existingPendingOrder->created_at && $existingPendingOrder->created_at->lte(now()->subMinutes(self::PAYMENT_EXPIRY_MINUTES))) {
-                    $existingPendingOrder->update(['status' => 'expired']);
-                } else {
-                    return [
-                        'error' => 'Masih ada pembayaran kelas yang belum selesai. Silakan selesaikan atau batalkan pembayaran sebelumnya.',
-                        'status' => 422,
-                        'data' => $existingPendingOrder->load('kelas'),
-                    ];
-                }
-            }
-
-            $order = KelasOrder::create([
-                'order_code'  => 'KLAS-' . now()->format('YmdHis') . '-' . Str::upper(Str::random(6)),
-                'user_id'     => $lockedUser->id,
-                'kelas_id'    => $kelas->id,
-                'grand_total' => $finalPrice,
-                'currency'    => 'IDR',
-                'status'      => 'pending',
-            ]);
-
-            return ['order' => $order, 'status' => 201];
-        });
-
-        if (! isset($orderResult['order'])) {
-            $payload = [
-                'message' => $orderResult['error'],
-            ];
-
-            if (isset($orderResult['data'])) {
-                $payload['data'] = $orderResult['data'];
-            }
-
-            return response()->json($payload, $orderResult['status']);
+        if ($alreadyEnrolled) {
+            return response()->json(['message' => 'Anda sudah terdaftar di kelas ini.'], 422);
         }
 
-        $order = $orderResult['order'];
+        $finalPrice = $kelas->discount_price ?? $kelas->price;
+
+        $order = KelasOrder::create([
+            'order_code'  => 'KLAS-' . now()->format('YmdHis') . '-' . Str::upper(Str::random(6)),
+            'user_id'     => $request->user()->id,
+            'kelas_id'    => $kelas->id,
+            'grand_total' => $finalPrice,
+            'currency'    => 'IDR',
+            'status'      => 'pending',
+        ]);
 
         // Setup Midtrans
         Config::$serverKey   = config('midtrans.server_key');
@@ -129,8 +85,6 @@ class KelasOrderController extends Controller
         try {
             $snapToken = Snap::getSnapToken($params);
         } catch (\Exception $e) {
-            $order->update(['status' => 'expired']);
-
             return response()->json(['message' => 'Gagal terhubung ke server pembayaran.'], 500);
         }
 
@@ -234,7 +188,7 @@ class KelasOrderController extends Controller
                 'payment_reference'       => $midtransStatus->payment_type ?? null,
             ]);
 
-            $enrollment = UserKelasEnrollment::firstOrCreate(
+            UserKelasEnrollment::firstOrCreate(
                 [
                     'user_id'  => $locked->user_id,
                     'kelas_id' => $locked->kelas_id,
@@ -248,7 +202,7 @@ class KelasOrderController extends Controller
             $userModel = User::lockForUpdate()->find($user->id);
             $ticketAmount = (int) ($locked->kelas->ticket_amount ?? 0);
 
-            if ($enrollment->wasRecentlyCreated && $ticketAmount > 0) {
+            if ($ticketAmount > 0) {
                 $userModel->ticket_balance += $ticketAmount;
                 TicketLog::create([
                     'user_id'     => $userModel->id,

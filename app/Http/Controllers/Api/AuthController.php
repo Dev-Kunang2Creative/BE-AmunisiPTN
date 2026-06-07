@@ -7,16 +7,12 @@ use App\Models\User;
 use App\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Laravel\Socialite\Facades\Socialite;
 
 class AuthController extends Controller
 {
-    private const GOOGLE_OAUTH_CODE_TTL_MINUTES = 5;
-
     public function register(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -135,43 +131,14 @@ class AuthController extends Controller
 
             $tokenRaw = $user->createToken('auth-token')->plainTextToken;
             $token = explode('|', $tokenRaw, 2)[1];
-            $code = Str::random(64);
-
-            Cache::put(
-                $this->googleOAuthCodeCacheKey($code),
-                $token,
-                now()->addMinutes(self::GOOGLE_OAUTH_CODE_TTL_MINUTES)
-            );
 
             $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
             
-            return redirect()->away($frontendUrl . '/auth/callback?code=' . $code);
+            return redirect()->away($frontendUrl . '/auth/callback?token=' . $token);
 
         } catch (\Exception $e) {
             $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
             return redirect()->away($frontendUrl . '/login?error=google_auth_failed');
         }
-    }
-
-    public function exchangeGoogleCode(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'code' => ['required', 'string', 'size:64'],
-        ]);
-
-        $token = Cache::pull($this->googleOAuthCodeCacheKey($validated['code']));
-
-        if (! $token) {
-            return response()->json(['message' => 'Kode login tidak valid atau sudah kedaluwarsa.'], 422);
-        }
-
-        return response()->json([
-            'token' => $token,
-        ]);
-    }
-
-    private function googleOAuthCodeCacheKey(string $code): string
-    {
-        return 'google_oauth_code:' . hash('sha256', $code);
     }
 }

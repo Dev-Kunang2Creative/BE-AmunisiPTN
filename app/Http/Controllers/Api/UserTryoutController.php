@@ -110,52 +110,20 @@ class UserTryoutController extends Controller
                 ], 422);
             }
 
-            $proofPaths = [];
+            $proofPaths = collect($request->file('proof_images', []))
+                ->map(fn ($file) => $file->store('proof-images', 'public'))
+                ->values()
+                ->all();
 
-            try {
-                $accessCreated = DB::transaction(function () use ($request, $user, $tryout, &$proofPaths) {
-                    $lockedUser = $user->newQuery()
-                        ->whereKey($user->id)
-                        ->lockForUpdate()
-                        ->first();
-
-                    if (! $lockedUser) {
-                        return false;
-                    }
-
-                    $alreadyEnrolled = UserTryoutAccess::where('user_id', $lockedUser->id)
-                        ->where('tryout_id', $tryout->id)
-                        ->exists();
-
-                    if ($alreadyEnrolled) {
-                        return false;
-                    }
-
-                    foreach ($request->file('proof_images', []) as $file) {
-                        $proofPaths[] = $file->store('proof-images', 'public');
-                    }
-
-                    UserTryoutAccess::create([
-                        'user_id' => $lockedUser->id,
-                        'tryout_id' => $tryout->id,
-                        'proof_image' => $proofPaths[0] ?? null,
-                        'proof_images' => $proofPaths,
-                        'granted_at' => now(),
-                    ]);
-
-                    return true;
-                });
-            } catch (\Throwable $e) {
-                if ($proofPaths) {
-                    Storage::disk('public')->delete($proofPaths);
-                }
-
-                throw $e;
-            }
-
-            if (! $accessCreated) {
-                return response()->json(['message' => 'Kamu sudah terdaftar di tryout ini'], 422);
-            }
+            DB::transaction(function () use ($user, $tryout, $proofPaths) {
+                UserTryoutAccess::create([
+                    'user_id' => $user->id,
+                    'tryout_id' => $tryout->id,
+                    'proof_image' => $proofPaths[0] ?? null,
+                    'proof_images' => $proofPaths,
+                    'granted_at' => now(),
+                ]);
+            });
 
             return response()->json([
                 'message' => 'Berhasil mendaftar tryout gratis.',
@@ -543,35 +511,6 @@ class UserTryoutController extends Controller
 
         if (! $session) {
             return response()->json(['message' => 'Sesi tidak valid'], 422);
-        }
-
-        $subtestSession = TryoutSubtestSession::where('tryout_session_id', $session->id)
-            ->where('tryout_subtest_id', $tryoutSubtest->id)
-            ->first();
-
-        if (! $subtestSession) {
-            return response()->json(['message' => 'Subtest belum dimulai'], 422);
-        }
-
-        if ($subtestSession->status !== 'in_progress') {
-            return response()->json(['message' => 'Subtest tidak sedang berjalan'], 422);
-        }
-
-        $endTime = $subtestSession->started_at
-            ? $subtestSession->started_at->copy()->addMinutes($tryoutSubtest->duration_minutes)
-            : null;
-
-        $remainingSeconds = $endTime
-            ? max((int) ceil(now()->diffInSeconds($endTime, false)), 0)
-            : 0;
-
-        if ($remainingSeconds <= 0) {
-            $subtestSession->update([
-                'status' => 'expired',
-                'expired_at' => now(),
-            ]);
-
-            return response()->json(['message' => 'Waktu subtest sudah habis'], 422);
         }
 
         $answer = $validated['answer'] ?? null;
