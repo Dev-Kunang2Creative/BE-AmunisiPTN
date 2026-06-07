@@ -179,7 +179,7 @@ class PaymentCallbackController extends Controller
                 'payment_reference'       => $paymentType,
             ]);
 
-            UserKelasEnrollment::firstOrCreate(
+            $enrollment = UserKelasEnrollment::firstOrCreate(
                 [
                     'user_id'  => $locked->user_id,
                     'kelas_id' => $locked->kelas_id,
@@ -193,7 +193,7 @@ class PaymentCallbackController extends Controller
             $user = User::lockForUpdate()->find($locked->user_id);
             $ticketAmount = (int) ($locked->kelas->ticket_amount ?? 0);
 
-            if ($ticketAmount > 0) {
+            if ($enrollment->wasRecentlyCreated && $ticketAmount > 0) {
                 $user->ticket_balance += $ticketAmount;
                 TicketLog::create([
                     'user_id'     => $user->id,

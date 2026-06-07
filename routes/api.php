@@ -40,6 +40,7 @@ Route::prefix('auth')->controller(AuthController::class)->group(function () {
     Route::post('/login', 'login');
     Route::get('/google/redirect', 'redirectToGoogle');
     Route::get('/google/callback', 'handleGoogleCallback');
+    Route::post('/google/exchange-code', 'exchangeGoogleCode');
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/me', 'me');
