@@ -18,8 +18,9 @@ class AdminSalesReportController extends Controller
             ->when($request->year,  fn($q, $y) => $q->whereRaw('YEAR(o.paid_at) = ?',  [$y]))
             ->when($request->month, fn($q, $m) => $q->whereRaw('MONTH(o.paid_at) = ?', [$m]));
 
-        $rows = (clone $baseQuery)
+        $rowsTryout = (clone $baseQuery)
             ->selectRaw('
+                "tryout"                      AS type,
                 oi.package_name_snapshot      AS product_name,
                 YEAR(o.paid_at)               AS year,
                 MONTH(o.paid_at)              AS month,
@@ -30,21 +31,83 @@ class AdminSalesReportController extends Controller
                 SUM(oi.subtotal)              AS total_sales
             ')
             ->groupByRaw('oi.package_name_snapshot, YEAR(o.paid_at), MONTH(o.paid_at)')
-            ->orderByRaw('YEAR(o.paid_at) DESC, MONTH(o.paid_at) DESC, oi.package_name_snapshot ASC')
             ->get();
 
-        $totalSales = (int) $rows->sum('total_sales');
-        $totalItemSold = (int) $rows->sum('total_item_sold');
-        $totalOrders = (int) (clone $baseQuery)->distinct('o.id')->count('o.id');
+        $kelasQuery = DB::table('kelas_orders as ko')
+            ->join('kelas as k', 'k.id', '=', 'ko.kelas_id')
+            ->whereIn('ko.status', ['paid', 'approved'])
+            ->whereNotNull('ko.paid_at')
+            ->when($request->year,  fn($q, $y) => $q->whereRaw('YEAR(ko.paid_at) = ?',  [$y]))
+            ->when($request->month, fn($q, $m) => $q->whereRaw('MONTH(ko.paid_at) = ?', [$m]));
+
+        $rowsKelas = (clone $kelasQuery)
+            ->selectRaw('
+                "kelas"                       AS type,
+                k.name                        AS product_name,
+                YEAR(ko.paid_at)              AS year,
+                MONTH(ko.paid_at)             AS month,
+                MIN(DATE(ko.paid_at))         AS period_start,
+                SUM(1)                        AS total_item_sold,
+                COUNT(DISTINCT ko.id)         AS order_count,
+                ROUND(AVG(ko.grand_total))    AS average_price,
+                SUM(ko.grand_total)           AS total_sales
+            ')
+            ->groupByRaw('k.name, YEAR(ko.paid_at), MONTH(ko.paid_at)')
+            ->get();
+
+        $rows = collect([...$rowsTryout, ...$rowsKelas])
+            ->sortBy([
+                ['year', 'desc'],
+                ['month', 'desc'],
+                ['product_name', 'asc'],
+            ])
+            ->values();
+
+        $totalSalesTryout = (int) $rowsTryout->sum('total_sales');
+        $totalItemSoldTryout = (int) $rowsTryout->sum('total_item_sold');
+        $totalOrdersTryout = (int) (clone $baseQuery)->distinct('o.id')->count('o.id');
+
+        $totalSalesKelas = (int) $rowsKelas->sum('total_sales');
+        $totalItemSoldKelas = (int) $rowsKelas->sum('total_item_sold');
+        $totalOrdersKelas = (int) (clone $kelasQuery)->distinct('ko.id')->count('ko.id');
+
+        $totalSales = $totalSalesTryout + $totalSalesKelas;
+        $totalItemSold = $totalItemSoldTryout + $totalItemSoldKelas;
+        $totalOrders = $totalOrdersTryout + $totalOrdersKelas;
+
+        // Tryout: Dev 60%, Amunisi 40%
+        $amunisiTryoutRev = (int) round($totalSalesTryout * 0.4);
+        $devTryoutRev = (int) round($totalSalesTryout * 0.6);
+
+        // Kelas: Dev 20%, Amunisi 80%
+        $amunisiKelasRev = (int) round($totalSalesKelas * 0.8);
+        $devKelasRev = (int) round($totalSalesKelas * 0.2);
+
+        $totalAmunisiRev = $amunisiTryoutRev + $amunisiKelasRev;
+        $totalDevRev = $devTryoutRev + $devKelasRev;
 
         return response()->json([
             'data' => $rows,
             'summary' => [
                 'total_sales' => $totalSales,
                 'total_item_sold' => $totalItemSold,
-                'amunisi_revenue' => (int) round($totalSales * 0.8),
-                'developer_revenue' => (int) round($totalSales * 0.2),
                 'order_count' => $totalOrders,
+                'total_amunisi_revenue' => $totalAmunisiRev,
+                'total_developer_revenue' => $totalDevRev,
+                'tryout' => [
+                    'total_sales' => $totalSalesTryout,
+                    'total_item_sold' => $totalItemSoldTryout,
+                    'order_count' => $totalOrdersTryout,
+                    'amunisi_revenue' => $amunisiTryoutRev,
+                    'developer_revenue' => $devTryoutRev,
+                ],
+                'kelas' => [
+                    'total_sales' => $totalSalesKelas,
+                    'total_item_sold' => $totalItemSoldKelas,
+                    'order_count' => $totalOrdersKelas,
+                    'amunisi_revenue' => $amunisiKelasRev,
+                    'developer_revenue' => $devKelasRev,
+                ]
             ],
         ]);
     }
