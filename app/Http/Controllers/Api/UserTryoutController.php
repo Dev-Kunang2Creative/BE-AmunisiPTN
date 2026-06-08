@@ -568,13 +568,21 @@ class UserTryoutController extends Controller
     {
         $user = $request->user();
 
+        if ($tryoutSubtest->tryout_id !== $tryout->id) {
+            return response()->json(['message' => 'Data tryout subtest tidak cocok'], 404);
+        }
+
         $session = TryoutSession::where('user_id', $user->id)
             ->where('tryout_id', $tryout->id)
             ->where('status', '!=', 'finished')
             ->latest('created_at')
             ->first();
 
-        $subtestSession = TryoutSubtestSession::where('tryout_session_id', $session->id ?? '')
+        if (! $session) {
+            return response()->json(['message' => 'Sesi tidak valid'], 422);
+        }
+
+        $subtestSession = TryoutSubtestSession::where('tryout_session_id', $session->id)
             ->where('tryout_subtest_id', $tryoutSubtest->id)
             ->first();
 
@@ -609,6 +617,13 @@ class UserTryoutController extends Controller
                 'status' => 'finished',
                 'finished_at' => now(),
             ]);
+
+            TryoutSubtestSession::where('tryout_session_id', $session->id)
+                ->where('status', 'in_progress')
+                ->update([
+                    'status' => 'finished',
+                    'finished_at' => now(),
+                ]);
         }
 
         return response()->json([
