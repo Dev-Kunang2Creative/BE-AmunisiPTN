@@ -335,7 +335,7 @@ class UserTryoutController extends Controller
         );
 
         $endTime = $subtestSession->started_at
-            ? Carbon\Carbon::parse($subtestSession->started_at)->addMinutes((int) $tryoutSubtest->duration_minutes)
+            ? \Carbon\Carbon::parse($subtestSession->started_at)->addMinutes((int) $tryoutSubtest->duration_minutes)
             : null;
 
         $remainingSeconds = $endTime
@@ -390,7 +390,7 @@ class UserTryoutController extends Controller
         }
 
         $endTime = $subtestSession->started_at
-            ? Carbon\Carbon::parse($subtestSession->started_at)->addMinutes((int) $tryoutSubtest->duration_minutes)
+            ? \Carbon\Carbon::parse($subtestSession->started_at)->addMinutes((int) $tryoutSubtest->duration_minutes)
             : null;
 
         $remainingSeconds = $endTime
@@ -521,7 +521,7 @@ class UserTryoutController extends Controller
             return response()->json(['message' => 'Subtest belum dimulai atau sudah selesai'], 422);
         }
 
-        $startedAt = Carbon\Carbon::parse($subtestSession->started_at);
+        $startedAt = \Carbon\Carbon::parse($subtestSession->started_at);
         $endTime = $startedAt->addMinutes((int) $tryoutSubtest->duration_minutes);
         
         if (now()->greaterThan($endTime->addSeconds(10))) {
