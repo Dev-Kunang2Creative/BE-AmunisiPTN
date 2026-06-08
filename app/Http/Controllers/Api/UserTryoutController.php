@@ -513,6 +513,20 @@ class UserTryoutController extends Controller
             return response()->json(['message' => 'Sesi tidak valid'], 422);
         }
 
+        $subtestSession = TryoutSubtestSession::where('tryout_session_id', $session->id)
+            ->where('tryout_subtest_id', $tryoutSubtest->id)
+            ->first();
+
+        if (! $subtestSession || $subtestSession->status !== 'in_progress') {
+            return response()->json(['message' => 'Subtest belum dimulai atau sudah selesai'], 422);
+        }
+
+        $endTime = $subtestSession->started_at->copy()->addMinutes($tryoutSubtest->duration_minutes);
+        
+        if (now()->greaterThan($endTime->addSeconds(10))) {
+            return response()->json(['message' => 'Waktu subtest sudah habis'], 422);
+        }
+
         $answer = $validated['answer'] ?? null;
         if ($question->question_type === 'essay' && $answer !== null) {
             $answer = RichTextSanitizer::sanitize($answer);
