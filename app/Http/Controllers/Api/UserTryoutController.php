@@ -292,7 +292,10 @@ class UserTryoutController extends Controller
         }
 
         // Calculate active subtest index
-        $tryoutSubtests = $tryout->tryoutSubtests()->orderBy('order_no')->get();
+        $tryoutSubtests = $tryout->tryoutSubtests->sortBy(function ($subtest) use ($user) {
+            return md5($user->id . $subtest->id);
+        })->values();
+
         $subtestSessions = TryoutSubtestSession::where('tryout_session_id', $session->id)->get();
         $activeSubtestIndex = 0;
 
