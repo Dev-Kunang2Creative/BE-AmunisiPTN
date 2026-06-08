@@ -291,6 +291,29 @@ class UserTryoutController extends Controller
             $session->refresh();
         }
 
+        // Calculate active subtest index
+        $tryoutSubtests = $tryout->tryoutSubtests()->orderBy('order_no')->get();
+        $subtestSessions = TryoutSubtestSession::where('tryout_session_id', $session->id)->get();
+        $activeSubtestIndex = 0;
+
+        foreach ($tryoutSubtests as $index => $tryoutSubtest) {
+            $subSession = $subtestSessions->firstWhere('tryout_subtest_id', $tryoutSubtest->id);
+            
+            if (! $subSession || $subSession->status === 'in_progress') {
+                $activeSubtestIndex = $index;
+                break;
+            }
+
+            $activeSubtestIndex = $index + 1;
+        }
+
+        // Ensure it doesn't exceed the last index
+        if ($activeSubtestIndex >= $tryoutSubtests->count()) {
+            $activeSubtestIndex = max(0, $tryoutSubtests->count() - 1);
+        }
+
+        $session->setAttribute('active_subtest_index', $activeSubtestIndex);
+
         return response()->json([
             'message' => 'Tryout dimulai',
             'data' => $session,
