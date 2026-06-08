@@ -17,8 +17,10 @@ class AdminStatsController extends Controller
     {
         $totalUsers    = User::where('role', 'user')->count();
         $totalTryouts  = \App\Models\Tryout::count();
-        $totalOrders   = Order::count();
-        $totalRevenue  = Order::whereIn('status', ['paid', 'approved'])->sum('grand_total');
+        $totalOrders   = Order::count() + \App\Models\KelasOrder::count();
+        $totalRevenueOrders  = Order::whereIn('status', ['paid', 'approved'])->sum('grand_total');
+        $totalRevenueKelas   = \App\Models\KelasOrder::whereIn('status', ['paid', 'approved'])->sum('grand_total');
+        $totalRevenue        = $totalRevenueOrders + $totalRevenueKelas;
 
         // Pengguna baru 7 hari terakhir
         $newUsersWeek = User::where('role', 'user')
@@ -48,16 +50,25 @@ class AdminStatsController extends Controller
             ->limit(5)
             ->get();
 
-        // Pendapatan per bulan
-        $monthlyRevenue = Order::whereIn('status', ['paid', 'approved'])
+        // Pendapatan per bulan (gabungan Order Paket dan Order Kelas)
+        $monthlyRevenueOrders = Order::whereIn('status', ['paid', 'approved'])
             ->selectRaw('YEAR(created_at) as year, MONTH(created_at) as month, SUM(grand_total) as total')
             ->groupByRaw('YEAR(created_at), MONTH(created_at)')
-            ->orderByRaw('YEAR(created_at), MONTH(created_at)')
-            ->get()
-            ->map(fn($r) => [
-                'label' => sprintf('%d/%02d', $r->year, $r->month),
-                'total' => $r->total,
-            ]);
+            ->get();
+
+        $monthlyRevenueKelas = \App\Models\KelasOrder::whereIn('status', ['paid', 'approved'])
+            ->selectRaw('YEAR(created_at) as year, MONTH(created_at) as month, SUM(grand_total) as total')
+            ->groupByRaw('YEAR(created_at), MONTH(created_at)')
+            ->get();
+
+        $monthlyRevenue = collect([...$monthlyRevenueOrders, ...$monthlyRevenueKelas])
+            ->groupBy(fn($item) => sprintf('%d/%02d', $item->year, $item->month))
+            ->map(fn($group, $label) => [
+                'label' => $label,
+                'total' => $group->sum('total'),
+            ])
+            ->sortBy('label')
+            ->values();
 
         // Pendaftaran pengguna per hari (30 hari terakhir)
         $userRegistrations = User::where('role', 'user')
@@ -68,11 +79,17 @@ class AdminStatsController extends Controller
             ->get()
             ->map(fn($r) => ['date' => $r->date, 'count' => $r->count]);
 
-        // Status transaksi
-        $orderByStatus = Order::selectRaw('status, COUNT(*) as count')
+        // Status transaksi gabungan
+        $orderStatus = Order::selectRaw('status, COUNT(*) as count')->groupBy('status')->get();
+        $kelasOrderStatus = \App\Models\KelasOrder::selectRaw('status, COUNT(*) as count')->groupBy('status')->get();
+
+        $orderByStatus = collect([...$orderStatus, ...$kelasOrderStatus])
             ->groupBy('status')
-            ->get()
-            ->map(fn($r) => ['status' => $r->status, 'count' => $r->count]);
+            ->map(fn($group, $status) => [
+                'status' => $status,
+                'count'  => $group->sum('count'),
+            ])
+            ->values();
 
         return response()->json([
             'data' => [
