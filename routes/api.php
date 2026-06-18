@@ -123,6 +123,7 @@ Route::middleware(['auth:sanctum', 'admin'])
         Route::apiResource('subtests', SubtestController::class)->except(['index']);
         Route::apiResource('subtests.questions', QuestionController::class);
         Route::post('/subtests/{subtest}/questions/bulk-import', [BulkImportQuestionController::class, 'store']);
+        Route::post('/subtests/{subtest}/questions/bulk-update-images', [BulkImportQuestionController::class, 'updateImagesFromExcel']);
         Route::get('/questions/bulk-import/template', [BulkImportQuestionController::class, 'template']);
         Route::get('/questions/bulk-import/excel-template', [BulkImportQuestionController::class, 'excelTemplate']);
 
