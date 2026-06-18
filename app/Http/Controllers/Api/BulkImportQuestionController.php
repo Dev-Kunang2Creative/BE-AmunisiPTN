@@ -273,6 +273,20 @@ class BulkImportQuestionController extends Controller
                 return null;
             }
 
+            // Convert to WebP using native GD
+            $image = @imagecreatefromstring($content);
+            if ($image !== false) {
+                ob_start();
+                imagewebp($image, null, 80); // 80 is the quality
+                $webpContent = ob_get_clean();
+                imagedestroy($image);
+                
+                if (!empty($webpContent)) {
+                    $content = $webpContent;
+                    $ext = 'webp';
+                }
+            }
+
             $storagePath = 'questions/' . Str::ulid() . '.' . $ext;
             Storage::disk('public')->put($storagePath, $content);
 
