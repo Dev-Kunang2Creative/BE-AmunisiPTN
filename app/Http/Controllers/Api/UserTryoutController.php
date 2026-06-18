@@ -930,7 +930,7 @@ class UserTryoutController extends Controller
             return response()->json(['message' => 'Akses tryout tidak ditemukan'], 404);
         }
 
-        if ($access->discussion_unlocked || !$tryout->is_free) {
+        if ($access->discussion_unlocked || !$tryout->is_free || !$tryout->require_ticket_for_discussion) {
             return response()->json(['message' => 'Pembahasan sudah terbuka'], 422);
         }
 
@@ -998,7 +998,7 @@ class UserTryoutController extends Controller
             ->where('tryout_id', $tryout->id)
             ->first();
 
-        $isUnlocked = !$tryout->is_free || ($access && $access->discussion_unlocked);
+        $isUnlocked = !$tryout->is_free || !$tryout->require_ticket_for_discussion || ($access && $access->discussion_unlocked);
 
         $data = $questions->map(function ($question) use ($userAnswers, $tryout, $isUnlocked, $session) {
             $answer = $userAnswers->get($question->id);

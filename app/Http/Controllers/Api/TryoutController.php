@@ -41,6 +41,7 @@ class TryoutController extends Controller
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
             'category' => ['nullable', 'string', Rule::in(['UTBK', 'UM'])],
             'is_free' => ['nullable', 'boolean'],
+            'require_ticket_for_discussion' => ['nullable', 'boolean'],
             'use_irt' => ['nullable', 'boolean'],
             'randomize_options' => ['nullable', 'boolean'],
             'is_published' => ['nullable', 'boolean'],
@@ -57,6 +58,13 @@ class TryoutController extends Controller
         $validated['created_by'] = $request->user()->id;
         $validated['category'] = $validated['category'] ?? 'UTBK';
         $validated['is_free'] = $validated['is_free'] ?? false;
+        
+        if (!$validated['is_free']) {
+            $validated['require_ticket_for_discussion'] = false;
+        } else {
+            $validated['require_ticket_for_discussion'] = $validated['require_ticket_for_discussion'] ?? false;
+        }
+
         $validated['use_irt'] = $validated['use_irt'] ?? true;
         $validated['randomize_options'] = $validated['randomize_options'] ?? false;
         $validated['is_published'] = $validated['is_published'] ?? false;
@@ -158,6 +166,7 @@ class TryoutController extends Controller
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
             'category' => ['nullable', 'string', Rule::in(['UTBK', 'UM'])],
             'is_free' => ['nullable', 'boolean'],
+            'require_ticket_for_discussion' => ['nullable', 'boolean'],
             'use_irt' => ['nullable', 'boolean'],
             'randomize_options' => ['nullable', 'boolean'],
             'is_published' => ['nullable', 'boolean'],
@@ -175,6 +184,13 @@ class TryoutController extends Controller
         }
 
         $validated['is_free'] = $validated['is_free'] ?? $tryout->is_free;
+        
+        if (!$validated['is_free']) {
+            $validated['require_ticket_for_discussion'] = false;
+        } else {
+            $validated['require_ticket_for_discussion'] = $validated['require_ticket_for_discussion'] ?? $tryout->require_ticket_for_discussion;
+        }
+
         $validated['use_irt'] = $validated['use_irt'] ?? $tryout->use_irt;
         $validated['randomize_options'] = $validated['randomize_options'] ?? $tryout->randomize_options;
         $validated['is_published'] = $validated['is_published'] ?? $tryout->is_published;

@@ -23,6 +23,7 @@ class Tryout extends Model
         'randomize_options',
         'is_published',
         'created_by',
+        'require_ticket_for_discussion',
     ];
 
     protected $casts = [
@@ -32,6 +33,7 @@ class Tryout extends Model
         'randomize_options' => 'boolean',
         'start_date' => 'datetime',
         'end_date' => 'datetime',
+        'require_ticket_for_discussion' => 'boolean',
     ];
 
     public function getImageUrlAttribute()
